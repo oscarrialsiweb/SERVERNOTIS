@@ -82,6 +82,8 @@ cron.schedule('* * * * *', () => {
   const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay(); // 1=Lunes, 7=Domingo
   const today = now.toISOString().slice(0, 10);
 
+   console.log('Revisando recordatorios para:', hour, today);
+
   db.all(
     `SELECT * FROM reminders WHERE hour = ? AND (startDate IS NULL OR startDate <= ?) AND (endDate IS NULL OR endDate >= ?)`,
     [hour, today, today],

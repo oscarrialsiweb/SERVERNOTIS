@@ -1,8 +1,9 @@
 const express = require('express');
 const admin = require('firebase-admin');
+const cors = require('cors');
 const app = express();
 app.use(express.json());
-
+app.use(cors()); // Habilitar CORS para pruebas
 
 const serviceAccount = {
   type: process.env.type,
@@ -24,6 +25,9 @@ admin.initializeApp({
 
 app.post('/send-notification', async (req, res) => {
   const { token, title, body, data } = req.body;
+  if (!token || !title || !body) {
+    return res.status(400).json({ success: false, error: 'Faltan campos requeridos: token, title o body.' });
+  }
   try {
     const message = {
       token,
@@ -33,6 +37,7 @@ app.post('/send-notification', async (req, res) => {
     const response = await admin.messaging().send(message);
     res.json({ success: true, response });
   } catch (error) {
+    console.error('Error enviando notificación:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

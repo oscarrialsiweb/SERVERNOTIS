@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "654038832883",
+    "project_id": "medirecuerda",
+    "storage_bucket": "medirecuerda.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:654038832883:android:59f58650bc08d1c83fc986",
+        "android_client_info": {
+          "package_name": "com.oscarrial.medirecuerda"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDj2457ICwG7nJFoymKeYgGYeTwsTHIO2Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

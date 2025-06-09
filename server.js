@@ -26,7 +26,15 @@ admin.initializeApp({
 });
 
 // Inicializa SQLite
-const db = new sqlite3.Database('./reminders.db');
+const db = new sqlite3.Database(process.env.DATABASE_URL || './data/reminders.db');
+
+// Asegurarse que el directorio existe
+const fs = require('fs');
+const path = require('path');
+const dbDir = path.dirname(process.env.DATABASE_URL || './data/reminders.db');
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 db.run(`
   CREATE TABLE IF NOT EXISTS reminders (
@@ -42,15 +50,6 @@ db.run(`
     medication_id TEXT
   )
 `);
-
-// Ejecuta esto una sola vez para agregar el campo medication_id (luego puedes quitarlo)
-db.run('ALTER TABLE reminders ADD COLUMN medication_id TEXT', (err) => {
-  if (err && !err.message.includes('duplicate')) {
-    console.error('Error al agregar medication_id:', err.message);
-  } else {
-    console.log('Campo medication_id agregado (o ya existía)');
-  }
-});
 
 // Crear o editar recordatorio
 app.post('/reminders', (req, res) => {

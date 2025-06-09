@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Eliminación de cuenta - PastiYa</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background-color: #f7f7f7;
+      color: #333;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #444;
+    }
+    a {
+      color: #007acc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul {
+      padding-left: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Eliminación de cuenta de PastiYa</h1>
+
+  <p>En PastiYa, valoramos tu privacidad y te ofrecemos la posibilidad de eliminar tu cuenta y los datos asociados.</p>
+
+  <h2>Pasos para eliminar tu cuenta</h2>
+  <ol>
+    <li>Abre la aplicación PastiYa e inicia sesión en tu cuenta.</li>
+    <li>Ve a la sección <strong>Configuración</strong> y selecciona <strong>Eliminar cuenta</strong>.</li>
+    <li>Confirma la eliminación de tu cuenta siguiendo las instrucciones en pantalla.</li>
+  </ol>
+
+  <h2>Datos que se eliminan</h2>
+  <p>Cuando eliminas tu cuenta, se eliminan los siguientes datos:</p>
+  <ul>
+    <li>Tu nombre de usuario y dirección de correo electrónico</li>
+    <li>Tus preferencias y configuraciones de la aplicación</li>
+    <li>Cualquier otro dato personal asociado a tu cuenta</li>
+  </ul>
+
+  <p>Conservamos cierta información de forma temporal (hasta 30 días) para cumplir con obligaciones legales o resolver disputas. Pasado este periodo, tus datos se eliminarán permanentemente.</p>
+
+  <h2>Soporte adicional</h2>
+  <p>Si necesitas ayuda para eliminar tu cuenta, puedes contactarnos en <a href="mailto:soporte@pastiya.com">soporte@pastiya.com</a>.</p>
+
+  <p>Gracias por confiar en PastiYa.</p>
+</body>
+</html>

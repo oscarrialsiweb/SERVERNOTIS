@@ -38,20 +38,30 @@ db.run(`
     frequency TEXT,
     daysOfWeek TEXT,
     startDate TEXT,
-    endDate TEXT
+    endDate TEXT,
+    medication_id TEXT
   )
 `);
 
+// Ejecuta esto una sola vez para agregar el campo medication_id (luego puedes quitarlo)
+db.run('ALTER TABLE reminders ADD COLUMN medication_id TEXT', (err) => {
+  if (err && !err.message.includes('duplicate')) {
+    console.error('Error al agregar medication_id:', err.message);
+  } else {
+    console.log('Campo medication_id agregado (o ya existía)');
+  }
+});
+
 // Crear o editar recordatorio
 app.post('/reminders', (req, res) => {
-  const { token, title, body, hour, frequency, daysOfWeek, startDate, endDate } = req.body;
-  if (!token || !title || !body || !hour || !frequency) {
+  const { token, title, body, hour, frequency, daysOfWeek, startDate, endDate, medication_id } = req.body;
+  if (!token || !title || !body || !hour || !frequency || !medication_id) {
     return res.status(400).json({ success: false, error: 'Faltan campos requeridos.' });
   }
   db.run(
-    `INSERT INTO reminders (token, title, body, hour, frequency, daysOfWeek, startDate, endDate)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [token, title, body, hour, frequency, JSON.stringify(daysOfWeek || []), startDate, endDate],
+    `INSERT INTO reminders (token, title, body, hour, frequency, daysOfWeek, startDate, endDate, medication_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [token, title, body, hour, frequency, JSON.stringify(daysOfWeek || []), startDate, endDate, medication_id],
     function (err) {
       if (err) return res.status(500).json({ success: false, error: err.message });
       res.json({ success: true, id: this.lastID });
@@ -62,6 +72,14 @@ app.post('/reminders', (req, res) => {
 // Eliminar recordatorio
 app.delete('/reminders/:id', (req, res) => {
   db.run('DELETE FROM reminders WHERE id = ?', [req.params.id], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// Eliminar todos los recordatorios de un medicamento
+app.delete('/reminders/medication/:medicationId', (req, res) => {
+  db.run('DELETE FROM reminders WHERE medication_id = ?', [req.params.medicationId], function (err) {
     if (err) return res.status(500).json({ success: false, error: err.message });
     res.json({ success: true });
   });

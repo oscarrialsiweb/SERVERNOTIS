@@ -116,6 +116,7 @@ cron.schedule('* * * * *', () => {
             notification: { title: reminder.title, body: reminder.body },
             data: {
               medication_id: reminder.medication_id,
+              medication_name: reminder.title,
               hora: reminder.hour,
               type: 'medication_reminder'
             },

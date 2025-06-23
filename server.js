@@ -114,7 +114,11 @@ cron.schedule('* * * * *', () => {
           const message = {
             token: reminder.token,
             notification: { title: reminder.title, body: reminder.body },
-            data: {},
+            data: {
+              medication_id: reminder.medication_id,
+              hora: reminder.hour,
+              type: 'medication_reminder'
+            },
           };
           admin.messaging().send(message)
             .then(() => console.log('Notificación enviada:', reminder.title, reminder.hour))

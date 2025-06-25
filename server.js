@@ -92,14 +92,34 @@ app.get('/reminders', (req, res) => {
   });
 });
 
-// Cron job: revisa cada minuto si hay recordatorios para enviar
+// Endpoint para obtener tomas pendientes de un usuario
+app.get('/pending-intakes/:userId', (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  db.all(
+    `SELECT r.* FROM reminders r
+      WHERE (r.startDate IS NULL OR r.startDate <= ?) 
+        AND (r.endDate IS NULL OR r.endDate >= ?)
+        AND NOT EXISTS (
+          SELECT 1 FROM intakes i
+          WHERE i.user_id = ? AND i.medication_id = r.medication_id
+            AND i.fecha = ? AND i.hora = r.hour AND i.tomada = 1
+        )`,
+    [today, today, req.params.userId, today],
+    (err, rows) => {
+      if (err) return res.status(500).json({ success: false, error: err.message });
+      res.json({ success: true, pending: rows });
+    }
+  );
+});
+
+// Modificar el cron job para no enviar notificaciones de tomas ya realizadas
 cron.schedule('* * * * *', () => {
   const now = new Date();
   const hour = now.toTimeString().slice(0, 5); // "HH:MM"
   const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay(); // 1=Lunes, 7=Domingo
   const today = now.toISOString().slice(0, 10);
 
-   console.log('Revisando recordatorios para:', hour, today);
+  console.log('Revisando recordatorios para:', hour, today);
 
   db.all(
     `SELECT * FROM reminders WHERE hour = ? AND (startDate IS NULL OR startDate <= ?) AND (endDate IS NULL OR endDate >= ?)`,
@@ -108,22 +128,32 @@ cron.schedule('* * * * *', () => {
       if (err) return;
       rows.forEach(reminder => {
         // Lógica de frecuencia
-        if (reminder.frequency === 'daily' ||
-            (reminder.frequency === 'weekly' && JSON.parse(reminder.daysOfWeek).includes(dayOfWeek))) {
-          // Envía la notificación
-          const message = {
-            token: reminder.token,
-            notification: { title: reminder.title, body: reminder.body },
-            data: {
-              medication_id: reminder.medication_id,
-              medication_name: reminder.title,
-              hora: reminder.hour,
-              type: 'medication_reminder'
-            },
-          };
-          admin.messaging().send(message)
-            .then(() => console.log('Notificación enviada:', reminder.title, reminder.hour))
-            .catch(e => console.error('Error enviando notificación:', e));
+        if (
+          reminder.frequency === 'daily' ||
+          (reminder.frequency === 'weekly' && JSON.parse(reminder.daysOfWeek).includes(dayOfWeek))
+        ) {
+          // Antes de enviar la notificación, verifica si ya está tomada
+          db.get(
+            'SELECT 1 FROM intakes WHERE medication_id = ? AND fecha = ? AND hora = ? AND tomada = 1',
+            [reminder.medication_id, today, reminder.hour],
+            (err, row) => {
+              if (!row) {
+                // Envía la notificación solo si no está tomada
+                const message = {
+                  token: reminder.token,
+                  notification: { title: reminder.title, body: reminder.body },
+                  data: {
+                    medication_id: reminder.medication_id,
+                    hora: reminder.hour,
+                    type: 'medication_reminder',
+                  },
+                };
+                admin.messaging().send(message)
+                  .then(() => console.log('Notificación enviada:', reminder.title, reminder.hour))
+                  .catch(e => console.error('Error enviando notificación:', e));
+              }
+            }
+          );
         }
       });
     }

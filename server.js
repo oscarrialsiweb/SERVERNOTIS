@@ -68,6 +68,56 @@ app.post('/reminders', (req, res) => {
   );
 });
 
+// Crear múltiples recordatorios de una vez (más eficiente)
+app.post('/reminders/batch', (req, res) => {
+  const { reminders } = req.body;
+  if (!reminders || !Array.isArray(reminders) || reminders.length === 0) {
+    return res.status(400).json({ success: false, error: 'Se requiere un array de recordatorios.' });
+  }
+
+  const stmt = db.prepare(
+    `INSERT INTO reminders (token, title, body, hour, frequency, daysOfWeek, startDate, endDate, medication_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+
+  const results = [];
+  let hasError = false;
+
+  reminders.forEach((reminder, index) => {
+    const { token, title, body, hour, frequency, daysOfWeek, startDate, endDate, medication_id } = reminder;
+    
+    if (!token || !title || !body || !hour || !frequency || !medication_id) {
+      hasError = true;
+      results.push({ index, success: false, error: 'Faltan campos requeridos' });
+      return;
+    }
+
+    stmt.run(
+      [token, title, body, hour, frequency, JSON.stringify(daysOfWeek || []), startDate, endDate, medication_id],
+      function (err) {
+        if (err) {
+          hasError = true;
+          results.push({ index, success: false, error: err.message });
+        } else {
+          results.push({ index, success: true, id: this.lastID });
+        }
+      }
+    );
+  });
+
+  stmt.finalize((err) => {
+    if (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    
+    if (hasError) {
+      return res.status(207).json({ success: false, results }); // 207 Multi-Status
+    } else {
+      return res.json({ success: true, results });
+    }
+  });
+});
+
 // Eliminar recordatorio
 app.delete('/reminders/:id', (req, res) => {
   db.run('DELETE FROM reminders WHERE id = ?', [req.params.id], function (err) {

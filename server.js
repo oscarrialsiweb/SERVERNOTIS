@@ -51,6 +51,18 @@ db.run(`
   )
 `);
 
+// Crear tabla intakes para verificar si las medicaciones ya fueron tomadas
+db.run(`
+  CREATE TABLE IF NOT EXISTS intakes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    medication_id TEXT,
+    fecha TEXT,
+    hora TEXT,
+    tomada INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
 // Crear o editar recordatorio
 app.post('/reminders', (req, res) => {
   const { token, title, body, hour, frequency, daysOfWeek, startDate, endDate, medication_id } = req.body;
@@ -246,62 +258,45 @@ cron.schedule('* * * * *', () => {
           (reminder.frequency === 'weekly' && JSON.parse(reminder.daysOfWeek).includes(dayOfWeek))
         ) {
           console.log(`Recordatorio ${index + 1} cumple criterios de frecuencia`);
+          console.log(`Enviando notificación para recordatorio ${index + 1}: ${reminder.title} a las ${reminder.hour}`);
           
-          // Antes de enviar la notificación, verifica si ya está tomada
-          db.get(
-            'SELECT 1 FROM intakes WHERE medication_id = ? AND fecha = ? AND hora = ? AND tomada = 1',
-            [reminder.medication_id, today, reminder.hour],
-            (err, row) => {
-              if (err) {
-                console.error(`Error verificando intake para recordatorio ${index + 1}:`, err);
-                return;
-              }
-              
-              if (!row) {
-                console.log(`Enviando notificación para recordatorio ${index + 1}: ${reminder.title} a las ${reminder.hour}`);
-                
-                // Envía la notificación solo si no está tomada
-                const message = {
-                  token: reminder.token,
-                  notification: { title: reminder.title, body: reminder.body },
-                  data: {
-                    medication_id: reminder.medication_id,
-                    hora: reminder.hour,
-                    type: 'medication_reminder',
-                  },
-                };
-                
-                console.log('Mensaje a enviar:', {
-                  token: message.token ? message.token.substring(0, 20) + '...' : 'NO TOKEN',
-                  title: message.notification.title,
-                  body: message.notification.body,
-                  data: message.data
-                });
-                
-                admin.messaging().send(message)
-                  .then((response) => {
-                    console.log('✅ Notificación enviada exitosamente:', {
-                      reminder_id: reminder.id,
-                      title: reminder.title,
-                      hour: reminder.hour,
-                      response: response
-                    });
-                  })
-                  .catch((error) => {
-                    console.error('❌ Error enviando notificación:', {
-                      reminder_id: reminder.id,
-                      title: reminder.title,
-                      hour: reminder.hour,
-                      error: error.message,
-                      errorCode: error.code,
-                      fullError: error
-                    });
-                  });
-              } else {
-                console.log(`Recordatorio ${index + 1} ya fue tomado, no se envía notificación`);
-              }
-            }
-          );
+          // Envía la notificación directamente
+          const message = {
+            token: reminder.token,
+            notification: { title: reminder.title, body: reminder.body },
+            data: {
+              medication_id: reminder.medication_id,
+              hora: reminder.hour,
+              type: 'medication_reminder',
+            },
+          };
+          
+          console.log('Mensaje a enviar:', {
+            token: message.token ? message.token.substring(0, 20) + '...' : 'NO TOKEN',
+            title: message.notification.title,
+            body: message.notification.body,
+            data: message.data
+          });
+          
+          admin.messaging().send(message)
+            .then((response) => {
+              console.log('✅ Notificación enviada exitosamente:', {
+                reminder_id: reminder.id,
+                title: reminder.title,
+                hour: reminder.hour,
+                response: response
+              });
+            })
+            .catch((error) => {
+              console.error('❌ Error enviando notificación:', {
+                reminder_id: reminder.id,
+                title: reminder.title,
+                hour: reminder.hour,
+                error: error.message,
+                errorCode: error.code,
+                fullError: error
+              });
+            });
         } else {
           console.log(`Recordatorio ${index + 1} no cumple criterios de frecuencia`);
         }

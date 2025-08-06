@@ -162,6 +162,50 @@ app.get('/pending-intakes/:userId', (req, res) => {
   );
 });
 
+// Endpoint de prueba para enviar notificación manual
+app.post('/test-notification', (req, res) => {
+  const { token, title, body } = req.body;
+  
+  if (!token || !title || !body) {
+    return res.status(400).json({ success: false, error: 'Faltan campos requeridos: token, title, body' });
+  }
+  
+  console.log('🔧 Enviando notificación de prueba...');
+  console.log('Token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
+  console.log('Title:', title);
+  console.log('Body:', body);
+  
+  const message = {
+    token: token,
+    notification: { 
+      title: title, 
+      body: body 
+    },
+    data: {
+      type: 'test_notification',
+      timestamp: new Date().toISOString()
+    },
+  };
+  
+  admin.messaging().send(message)
+    .then((response) => {
+      console.log('✅ Notificación de prueba enviada exitosamente:', response);
+      res.json({ success: true, response: response });
+    })
+    .catch((error) => {
+      console.error('❌ Error enviando notificación de prueba:', {
+        error: error.message,
+        errorCode: error.code,
+        fullError: error
+      });
+      res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        errorCode: error.code 
+      });
+    });
+});
+
 // Modificar el cron job para no enviar notificaciones de tomas ya realizadas
 cron.schedule('* * * * *', () => {
   const now = new Date();
@@ -175,19 +219,43 @@ cron.schedule('* * * * *', () => {
     `SELECT * FROM reminders WHERE hour = ? AND (startDate IS NULL OR startDate <= ?) AND (endDate IS NULL OR endDate >= ?)`,
     [hour, today, today],
     (err, rows) => {
-      if (err) return;
-      rows.forEach(reminder => {
+      if (err) {
+        console.error('Error consultando recordatorios:', err);
+        return;
+      }
+      
+      console.log(`Encontrados ${rows.length} recordatorios para ${hour}`);
+      
+      rows.forEach((reminder, index) => {
+        console.log(`Recordatorio ${index + 1}:`, {
+          id: reminder.id,
+          title: reminder.title,
+          hour: reminder.hour,
+          token: reminder.token ? reminder.token.substring(0, 20) + '...' : 'NO TOKEN',
+          frequency: reminder.frequency,
+          medication_id: reminder.medication_id
+        });
+        
         // Lógica de frecuencia
         if (
           reminder.frequency === 'daily' ||
           (reminder.frequency === 'weekly' && JSON.parse(reminder.daysOfWeek).includes(dayOfWeek))
         ) {
+          console.log(`Recordatorio ${index + 1} cumple criterios de frecuencia`);
+          
           // Antes de enviar la notificación, verifica si ya está tomada
           db.get(
             'SELECT 1 FROM intakes WHERE medication_id = ? AND fecha = ? AND hora = ? AND tomada = 1',
             [reminder.medication_id, today, reminder.hour],
             (err, row) => {
+              if (err) {
+                console.error(`Error verificando intake para recordatorio ${index + 1}:`, err);
+                return;
+              }
+              
               if (!row) {
+                console.log(`Enviando notificación para recordatorio ${index + 1}: ${reminder.title} a las ${reminder.hour}`);
+                
                 // Envía la notificación solo si no está tomada
                 const message = {
                   token: reminder.token,
@@ -198,12 +266,40 @@ cron.schedule('* * * * *', () => {
                     type: 'medication_reminder',
                   },
                 };
+                
+                console.log('Mensaje a enviar:', {
+                  token: message.token ? message.token.substring(0, 20) + '...' : 'NO TOKEN',
+                  title: message.notification.title,
+                  body: message.notification.body,
+                  data: message.data
+                });
+                
                 admin.messaging().send(message)
-                  .then(() => console.log('Notificación enviada:', reminder.title, reminder.hour))
-                  .catch(e => console.error('Error enviando notificación:', e));
+                  .then((response) => {
+                    console.log('✅ Notificación enviada exitosamente:', {
+                      reminder_id: reminder.id,
+                      title: reminder.title,
+                      hour: reminder.hour,
+                      response: response
+                    });
+                  })
+                  .catch((error) => {
+                    console.error('❌ Error enviando notificación:', {
+                      reminder_id: reminder.id,
+                      title: reminder.title,
+                      hour: reminder.hour,
+                      error: error.message,
+                      errorCode: error.code,
+                      fullError: error
+                    });
+                  });
+              } else {
+                console.log(`Recordatorio ${index + 1} ya fue tomado, no se envía notificación`);
               }
             }
           );
+        } else {
+          console.log(`Recordatorio ${index + 1} no cumple criterios de frecuencia`);
         }
       });
     }

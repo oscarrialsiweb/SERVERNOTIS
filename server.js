@@ -1,4 +1,212 @@
-// Modificar el cron job para no enviar notificaciones de tomas ya realizadas
+const express = require('express');
+const admin = require('firebase-admin');
+const cors = require('cors');
+const sqlite3 = require('sqlite3').verbose();
+const cron = require('node-cron');
+const app = express();
+app.use(express.json());
+app.use(cors()); // Habilitar CORS para pruebas
+
+const serviceAccount = {
+  type: process.env.type,
+  project_id: process.env.project_id,
+  private_key_id: process.env.private_key_id,
+  private_key: process.env.private_key.replace(/\\n/g, '\n'),
+  client_email: process.env.client_email,
+  client_id: process.env.client_id,
+  auth_uri: process.env.auth_uri,
+  token_uri: process.env.token_uri,
+  auth_provider_x509_cert_url: process.env.auth_provider_x509_cert_url,
+  client_x509_cert_url: process.env.client_x509_cert_url,
+  universe_domain: process.env.universe_domain
+};
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+// Inicializa SQLite
+const db = new sqlite3.Database(process.env.DATABASE_URL || './data/reminders.db');
+
+// Asegurarse que el directorio existe
+const fs = require('fs');
+const path = require('path');
+const dbDir = path.dirname(process.env.DATABASE_URL || './data/reminders.db');
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT,
+    title TEXT,
+    body TEXT,
+    hour TEXT,
+    frequency TEXT,
+    daysOfWeek TEXT,
+    startDate TEXT,
+    endDate TEXT,
+    medication_id TEXT
+  )
+`);
+
+// Crear o editar recordatorio
+app.post('/reminders', (req, res) => {
+  const { token, title, body, hour, frequency, daysOfWeek, startDate, endDate, medication_id } = req.body;
+  if (!token || !title || !body || !hour || !frequency || !medication_id) {
+    return res.status(400).json({ success: false, error: 'Faltan campos requeridos.' });
+  }
+  db.run(
+    `INSERT INTO reminders (token, title, body, hour, frequency, daysOfWeek, startDate, endDate, medication_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [token, title, body, hour, frequency, JSON.stringify(daysOfWeek || []), startDate, endDate, medication_id],
+    function (err) {
+      if (err) return res.status(500).json({ success: false, error: err.message });
+      res.json({ success: true, id: this.lastID });
+    }
+  );
+});
+
+// Crear múltiples recordatorios de una vez (más eficiente)
+app.post('/reminders/batch', (req, res) => {
+  const { reminders } = req.body;
+  if (!reminders || !Array.isArray(reminders) || reminders.length === 0) {
+    return res.status(400).json({ success: false, error: 'Se requiere un array de recordatorios.' });
+  }
+
+  const stmt = db.prepare(
+    `INSERT INTO reminders (token, title, body, hour, frequency, daysOfWeek, startDate, endDate, medication_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+
+  const results = [];
+  let hasError = false;
+
+  reminders.forEach((reminder, index) => {
+    const { token, title, body, hour, frequency, daysOfWeek, startDate, endDate, medication_id } = reminder;
+    
+    if (!token || !title || !body || !hour || !frequency || !medication_id) {
+      hasError = true;
+      results.push({ index, success: false, error: 'Faltan campos requeridos' });
+      return;
+    }
+
+    stmt.run(
+      [token, title, body, hour, frequency, JSON.stringify(daysOfWeek || []), startDate, endDate, medication_id],
+      function (err) {
+        if (err) {
+          hasError = true;
+          results.push({ index, success: false, error: err.message });
+        } else {
+          results.push({ index, success: true, id: this.lastID });
+        }
+      }
+    );
+  });
+
+  stmt.finalize((err) => {
+    if (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    
+    if (hasError) {
+      return res.status(207).json({ success: false, results }); // 207 Multi-Status
+    } else {
+      return res.json({ success: true, results });
+    }
+  });
+});
+
+// Eliminar recordatorio
+app.delete('/reminders/:id', (req, res) => {
+  db.run('DELETE FROM reminders WHERE id = ?', [req.params.id], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// Eliminar todos los recordatorios de un medicamento
+app.delete('/reminders/medication/:medicationId', (req, res) => {
+  db.run('DELETE FROM reminders WHERE medication_id = ?', [req.params.medicationId], function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// Listar recordatorios (opcional, para debug)
+app.get('/reminders', (req, res) => {
+  db.all('SELECT * FROM reminders', [], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, reminders: rows });
+  });
+});
+
+// Endpoint para obtener tomas pendientes de un usuario
+app.get('/pending-intakes/:userId', (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  db.all(
+    `SELECT r.* FROM reminders r
+      WHERE (r.startDate IS NULL OR r.startDate <= ?) 
+        AND (r.endDate IS NULL OR r.endDate >= ?)
+        AND NOT EXISTS (
+          SELECT 1 FROM intakes i
+          WHERE i.user_id = ? AND i.medication_id = r.medication_id
+            AND i.fecha = ? AND i.hora = r.hour AND i.tomada = 1
+        )`,
+    [today, today, req.params.userId, today],
+    (err, rows) => {
+      if (err) return res.status(500).json({ success: false, error: err.message });
+      res.json({ success: true, pending: rows });
+    }
+  );
+});
+
+// Endpoint de prueba para enviar notificación manual
+app.post('/test-notification', (req, res) => {
+  const { token, title, body } = req.body;
+  
+  if (!token || !title || !body) {
+    return res.status(400).json({ success: false, error: 'Faltan campos requeridos: token, title, body' });
+  }
+  
+  console.log('🔧 Enviando notificación de prueba...');
+  console.log('Token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
+  console.log('Title:', title);
+  console.log('Body:', body);
+  
+  const message = {
+    token: token,
+    notification: { 
+      title: title, 
+      body: body 
+    },
+    data: {
+      type: 'test_notification',
+      timestamp: new Date().toISOString()
+    },
+  };
+  
+  admin.messaging().send(message)
+    .then((response) => {
+      console.log('✅ Notificación de prueba enviada exitosamente:', response);
+      res.json({ success: true, response: response });
+    })
+    .catch((error) => {
+      console.error('❌ Error enviando notificación de prueba:', {
+        error: error.message,
+        errorCode: error.code,
+        fullError: error
+      });
+      res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        errorCode: error.code 
+      });
+    });
+});
+
+// Cron job para enviar notificaciones
 cron.schedule('* * * * *', () => {
   const now = new Date();
   const currentHour = now.toTimeString().slice(0, 5); // "HH:MM"
@@ -106,3 +314,10 @@ cron.schedule('* * * * *', () => {
     console.log(`No es el minuto 0 (es ${now.getMinutes()}), no se procesan recordatorios`);
   }
 });
+
+app.get('/', (req, res) => res.send('Servidor de notificaciones funcionando'));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log('Servidor escuchando en puerto', PORT);
+}); 
